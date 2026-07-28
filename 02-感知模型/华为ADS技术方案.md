@@ -132,6 +132,161 @@ PDP 方案:   预测+决策+规划 一张网 (数据驱动, 端到端)
 
 ---
 
+## 四、核心架构深度解析
+
+### 4.1 GOD 大网的网络结构（推理级细节）
+
+GOD 不是单一的 "一个网络"，而是一组网络的统称：
+
+```
+GOD 大网 (ADS 3.0):
+┌─────────────────────────────────────────────┐
+│                多模态输入                      │
+│   Camera(6) + LiDAR(1) + Radar(1+)          │
+└──────────────────┬──────────────────────────┘
+                   ↓
+┌─────────────────────────────────────────────┐
+│          多模态特征提取 & 融合                │
+│  Camera: ViT/Swin → Image Tokens            │
+│  LiDAR:  Voxel/Pillar → Point Tokens        │
+│  Radar:  Point Cloud → Radar Tokens         │
+│  → Cross-Modal Attention (早期融合)          │
+└──────────────────┬──────────────────────────┘
+                   ↓
+┌─────────────────────────────────────────────┐
+│          3D 占据感知 (Occupancy)             │
+│  • 稠密 3D 占用栅格预测 (voxel-wise)          │
+│  • 语义分割 (可行驶/不可行驶/未知)              │
+│  • 运动预测 (per-voxel flow)                 │
+│  → 输出: 3D Occupancy + Semantics + Flow    │
+└──────────────────┬──────────────────────────┘
+                   ↓
+┌─────────────────────────────────────────────┐
+│          通用障碍物检测 (GOD)                 │
+│  • DBSCAN 聚类 occupied voxels → proposals   │
+│  • 开集检测: 不限类别，所有被占空间 = 障碍物      │
+│  • 运动判别: 静止/运动 → 过滤静态背景          │
+│  → 输出: 通用障碍物列表 (不限于白名单)           │
+└──────────────────┬──────────────────────────┘
+                   ↓
+┌─────────────────────────────────────────────┐
+│       场景理解 + 白名单检测 (可选)              │
+│  • 对 GOD proposals 做细粒度分类               │
+│  • 常规目标: 车辆/行人/骑行者 (白名单)           │
+│  • 异形障碍物: 保持 "通用障碍物" 标签           │
+└─────────────────────────────────────────────┘
+```
+
+**GOD 的关键设计**: Occupancy（几何）覆盖所有空间，DBSCAN 聚类（无监督）发现候选障碍物，运动判别过滤误检 → **不需要预定义类别**。
+
+### 4.2 PDP 网络的具体设计
+
+PDP = Prediction Decision Planning 融合网络：
+
+```
+PDP 输入:
+  • GOD 输出: 3D Occupancy + 障碍物列表
+  • RCR 输出: 实时车道拓扑图 (lane graph)
+  • 导航目标: 高精/标精地图路径
+  • 自车状态: 速度/加速度/朝向
+
+PDP 网络:
+  1. Scene Encoding (Transformer):
+     障碍物 tokens + 车道 tokens + 导航 tokens → Self-Attention
+     → Unified Scene Token [N_tokens, 256]
+
+  2. Prediction Head:
+     每个障碍物 → 多模态未来轨迹 (同 UniAD MotionFormer)
+     → 6 modes × 6s trajectory
+
+  3. Decision Head:
+     场景 token + 交通规则 → 行为决策 (直行/左转/右转/变道/绕行)
+     → 可解释的行为标签 (对比端到端黑盒)
+
+  4. Planning Head:
+     决策 + 场景 token → 自车轨迹生成
+     → 采样 + 优化: 生成 K=32 候选 → 安全/舒适/进度评分 → 选最优
+     (类似 VAD 的 explicit planning, 但更工程化)
+
+PDP 输出:
+  • 规划轨迹: [(x₁,y₁,t₁), ..., (x₃₀,y₃₀,t₃₀)] (3s horizon)
+  • 碰撞风险评估
+  • 盲区预警
+```
+
+**分体式 vs 端到端的核心差异**: PDP 保留可解释的中间表示（决策标签、trajectory scoring），模型的行为可以审计 → 这正是量产的关键需求。
+
+### 4.3 RCR 如何实现无图
+
+```python
+# RCR = Road Cognition & Reasoning
+# 输入: 6 camera images
+# 流程:
+img_features = ImageBackbone(images)  # ViT/Swin
+bev_features = BEVEncoder(img_features)  # 类似 BEVFormer 轻量版
+
+# 1. Lane Detection Head (类似 MapTR):
+lanes = LaneHead(bev_features)
+# → 每条车道线: [(x₁,y₁), (x₂,y₂), ..., (x₂₀,y₂₀)] (polyline points)
+
+# 2. Lane Topology Head:
+relations = TopologyHead(lanes)
+# → 车道之间的连接关系 (并线/交叉/分流)
+# → 车道的交通属性 (限速/转向规则/路权)
+
+# 3. 实时建图输出:
+virtual_map = {
+    'lane_centerlines': [...],    # 车道中心线
+    'lane_dividers': [...],        # 车道分割线
+    'lane_topology': [...],        # 拓扑连接
+    'traffic_rules': {...}         # 交通规则
+}
+
+# 关键革新: RCR 不存储地图 — 实时推理!
+# → "无图"不是没地图，是"不用 HD Map，靠实时推理重建"
+# → 对道路变化 (施工/重新划线) 天然自适应
+```
+
+**RCR 的核心难点**: 远距离 (>100m) 的车道结构推理 → 需要时序多帧信息 + 道路先验知识。
+
+---
+
+## 五、面试官追问
+
+### Q: GOD 的 DBSCAN 聚类在 Occupancy 上怎么做的？参数怎么选？
+
+DBSCAN 在 3D Occupancy Grid 上聚类:
+- 3D connected components 在 occupied voxels 上做聚类
+- eps（邻域半径）= 0.8-1.2m（voxel size 的 2-3 倍）→ 保证同一物理物体被聚为一类
+- min_samples = 3-5 voxels → 过滤噪声（如单个飘动的叶子）
+- 聚类后每个 cluster 是一个 "通用障碍物" proposal
+
+### Q: 华为用 LiDAR 做 GOD，如果去掉 LiDAR 还能做 GOD 吗？
+
+可以，但纯视觉 GOD 有两个关键挑战：
+1. 远距离深度不准 → Occupancy 在 80m+ 变得稀疏 → DBSCAN 聚类失效
+2. 夜间/雨雾 → 视觉 Occupancy 质量下降 → False positive 增多
+
+这就是为什么华为坚持 LiDAR —— 在 GOD 任务上，几何传感器（LiDAR）比语义传感器（Camera）更可靠。特斯拉的解决方案是用时序多帧 + 更大模型弥补单帧视觉深度不足。
+
+### Q: PDP 和 VAD 的区别？
+
+| | PDP (华为) | VAD (学术) |
+|---|---|---|
+| **规划方法** | 采样 + 优化 + 规则兜底 | 采样 + 优化 (纯 learned scoring) |
+| **安全保证** | CAS 3.0 硬件层面兜底 | 学出来的 safety score |
+| **场景覆盖** | 量产验证 (百万公里) | nuScenes 验证 |
+| **可解释性** | 显式决策标签 | 隐式 scoring |
+| **落地状态** | 量产 ✅ | 研究 🔬 |
+
+**核心差异**: PDP 有**规则兜底** — 即使网络输出不合理轨迹，CAS 3.0 的碰撞检测会 override。这是量产 vs 学术的最关键区别。
+
+### Q: ADS 3.0 的 GOD 大网"去掉 BEV"是什么意思？
+
+不是完全去掉 BEV 特征，而是**不再用传统 2D BEV 检测头**。GOD 大网直接输出 3D Occupancy，BEV 变成了一个中间特征（类似 neck），而不再作为最终输出空间。这是从 "BEV 检测" 到 "3D 占据感知" 的范式转换。
+
+---
+
 ## 四、与特斯拉 FSD 的对比
 
 | 维度 | 华为 ADS 3.0 | 特斯拉 FSD V12 |

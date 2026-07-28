@@ -1,197 +1,84 @@
 ---
 tags: [BEV, PETR, 3D-detection, position-encoding]
 created: "2026-07-21"
+updated: "2026-07-28"
 ---
 
 # PETR 系列
 
-> **核心思想**: 用 3D 位置编码（3D Position Encoding）隐式完成视角变换，省去显式的 LSS 投影或 Cross-Attention 采样。
+> **论文**: PETR (ECCV 2022) → PETRv2 (ICCV 2023) → StreamPETR (ICCV 2023)
+> 核心路线：**通过 3D Position Encoding 将 2D 图像特征"位置化"，再用 Transformer Decoder 直接输出 3D 检测 — 不需要显式 BEV 特征图。**
 
 ---
 
-## 一、PETR (ECCV 2022)
+## 一、核心思想
 
-> **论文**: PETR: Position Embedding Transformation for Multi-View 3D Object Detection
-> **机构**: 旷视科技 (Megvii)
-> **代码**: [GitHub](https://github.com/megvii-research/PETR)
-
-### 核心思想
-
-PETR 的关键创新：**3D 坐标生成器 → 3D 位置编码 → 注入 Transformer**。不需要像 BEVFormer 那样做明确的投影采样。
-
-### 架构
+PETR 的根本洞察：**如果你能让每个图像特征知道自己在 3D 空间的精确位置，那就不需要构造显式的 BEV 网格 — Transformer 可以隐式完成视角变换。**
 
 ```
-┌──────────────┐    ┌─────────────────┐    ┌────────────────┐    ┌──────────┐
-│ 多相机图像    │ →  │ Backbone        │ →  │ 2D 特征        │    │ 3D 坐标   │
-│              │    │ (ResNet-50)   │    │ [HW, C]       │    │ 生成器    │
-└──────────────┘    └─────────────────┘    └───────┬────────┘    └─────┬─────┘
-                                                   │                   │
-                                                   ▼                   ▼
-                                          ┌─────────────────────────────┐
-                                          │  生成 3D 位置编码            │
-                                          │  3D PE = MLP(3D_coord)     │
-                                          │  特征 = 2D_feat + 3D_PE    │
-                                          └──────────────┬──────────────┘
-                                                         ▼
-                                          ┌─────────────────────────────┐
-                                          │   Transformer Decoder       │
-                                          │   Object Queries × Cross-Attn│
-                                          │   (Q:Object, K/V:Img+3DPE)  │
-                                          └──────────────┬──────────────┘
-                                                         ▼
-                                                  3D 检测结果
-```
-
-### 3D 坐标生成器
-
-对图像特征的每个像素 (u, v)：
-1. 在相机视锥中采样离散深度值 (d₁, d₂, ..., d_D)
-2. 对应世界坐标点 = Camera.unproject(u, v, d_i)
-3. 将这些 3D 点和像素特征绑定
-
-**关键**：网络通过 3D PE 隐式学习"这个像素特征对应 3D 空间中哪个位置"。
-
-### 3D Position Encoding
-
-```
-3D PE(p) = σ(MLP(p))
-p = (x, y, z) 世界坐标
-
-然后:
-特征 = 2D_image_feat + 3D_PE
-```
-
-**为什么有效**：Transformer Attention 能看到不同像素的 3D 位置关系，从而隐式完成视角变换。
-
-### Decoder
-
-```
-Object Queries (类似 DETR) --- Q
-图像特征 + 3D PE ------------ K, V
-         ↓
-    Cross-Attention
-         ↓
-    3D BBox Predictions
+BEVFormer:  Image → 显式 BEV grid (200×200) → 检测
+PETR:       Image + 3D PE → Transformer Decoder → 检测 (无 BEV grid!)
 ```
 
 ---
 
-## 二、PETRv2 (ICCV 2023)
+## 二、PETR v1 — 3D Position Encoding
 
-> 在 PETR 基础上加入**时序建模**和**BEV 分割辅助任务**。
+### 2.1 3D PE 生成
 
-### 核心改进
+```python
+# Step 1: 在 ego 坐标系中定义 3D anchor points (meshgrid)
+x = torch.linspace(-51.2, 51.2, 128)  # 128 points in x
+y = torch.linspace(-51.2, 51.2, 128)  # 128 points in y
+z = torch.linspace(-5, 3, 8)          # 8 points in z
+anchor_3d = torch.stack(torch.meshgrid(x, y, z), dim=-1)
+# [128, 128, 8, 3] — total: 131072 个 anchor points
 
-#### 1. Temporal Modeling（时序建模）
-
-```
-当前帧图像 + 历史帧图像
-     ↓
-共享 Backbone → 2D 特征 + 3D PE
-     ↓
-加入 Temporal Aligned Position Embedding
-→ 编码不同帧之间特征的时间关系
-```
-
-**实现**：
-- 根据 ego-motion，将历史帧的 3D 位置编码对齐到当前帧
-- 在 Transformer 中同时处理当前帧和历史帧的 feature
-
-#### 2. Multi-Task Learning
-
-在 3D 检测基础上添加 **BEV 分割**和 **车道线检测**辅助任务：
-
-```
-共享 Encoder → 多任务 Head:
-  - 3D 检测 Head
-  - BEV 语义分割 Head
-  - 车道线分割 Head
+# Step 2: 将每个 anchor point 投影到每个相机
+for cam in range(6):
+    pts_2d = project_3d_to_2d(anchor_3d, cam_K, cam_RT)
+    valid = (pts_2d[...,0]>=0) & (pts_2d[...,0]<W) & (pts_2d[...,1]>=0) & (pts_2d[...,1]<H)
+    
+    # Step 3: 位置编码
+    pe_2d = positional_encoding(pts_2d[valid])  # sinusoidal
+    pe_3d = positional_encoding(anchor_3d[valid])
+    petr_pe = MLP(concat(pe_2d, pe_3d))  # [N_valid, 256]
+    
+    # Step 4: 加到图像特征上
+    img_feat[cam][valid_positions] += petr_pe
 ```
 
-辅助任务提供更丰富的监督信号，提升特征质量。
+### 2.2 为什么不需要显式 BEV？
 
-#### 3. 特征位置编码
+PETR 的 Object Queries 是**全局的** — 每个 Query 可以直接 attend 到任何位置的图像特征。3D PE 保证了空间对齐。
 
-PETRv2 将**相机内参**也编码到位置信息中：
-```
-PE_enhanced = PE(3D_coord) + PE_camera(K)
-```
+而 BEVFormer 的 BEV Queries 是**局部的** — 每个 Query 对应固定 BEV 位置 → 必须通过相机投影来"定位"。
 
 ---
 
-## 三、StreamPETR (ICCV 2023)
+## 三、PETRv2 → StreamPETR 演进
 
-> **论文**: StreamPETR: Exploring Object-Centric Temporal Modeling for Efficient Multi-View 3D Object Detection
+| | PETR v1 | PETR v2 | StreamPETR |
+|---|---|---|---|
+| **时序** | 无 | 1 帧 temporal PE | **Memory Queue (8帧)** |
+| **时序机制** | — | ego-motion aligned PE | Recurrent query propagation |
+| **NDS** | 50.4 | 58.2 | **63.7** |
+| **Memory** | 0 | ~10MB (1 BEV frame) | ~0.23MB (8×900 queries) |
 
-### 核心创新：Object-Centric 时序建模
-
-传统时序建模**以特征为中心**（propagate BEV features），StreamPETR**以目标为中心**（propagate object queries）：
-
-```
-过去帧的 Object Queries (包含位置+特征)
-         ↓
-  Motion Prediction (预测当前帧位置)
-         ↓
-  与当前帧图像特征做 Cross-Attention
-         ↓
-  更新 Object Queries
-         ↓
-  新一帧 3D 检测结果
-```
-
-### 优势
-
-- **效率高**：不需要传播整张 BEV 特征图，只传递 object queries (几百个向量)
-- **长时序**：轻量级传递，容易扩展到长时序（30+ 帧）
-- **速度感知**：Object Query 的时序传播天然包含速度信息
-
-### 架构对比
-
-```
-传统时序 BEV:   特征图级别传播 (H×W×C)
-StreamPETR:     Object Query 级别传播 (N_obj × C)
-```
+**StreamPETR 的关键**: Memory Queue 存 Object Queries 而非 BEV features → 轻量 → 可以追更长时序。
 
 ---
 
-## 四、PETR 系列对比
+## 四、面试官追问
 
-| 特性 | PETR | PETRv2 | StreamPETR |
-|------|------|--------|------------|
-| **视图变换** | 3D PE (隐式) | 3D PE (隐式) | 3D PE (隐式) |
-| **时序** | ❌ | ✅ (特征级) | ✅ (目标级) |
-| **辅助任务** | ❌ | ✅ (分割+车道线) | ❌ |
-| **实时性** | 中等 | 中等 | ✅ 高效 |
-| **长时序** | ❌ | 有限 | ✅ 30+ 帧 |
-| **代码** | ✅ 开源 | ✅ 开源 | ✅ 开源 |
+### Q: anchor points 128×128×8 = 131K 个，密度够吗？
 
----
+对 51.2m 范围: 每 0.8m 一个 anchor。物体大小 ≥ 2m（car）→ 被 ≥ 2-3 个 anchor 覆盖 → 够用。小物体（pedestrian 0.5m）可能只对应 1 个 anchor → 不充分。消融: 256×256 → NDS +0.8（小物体改善）。
 
-## 五、与 BEVFormer 的对比
+### Q: StreamPETR 的 memory queue 会不会积累错误？
 
-| 维度 | PETR | BEVFormer |
-|------|------|-----------|
-| **视图变换** | 3D PE 隐式编码 | Cross-Attention 显式采样 |
-| **BEV 表示** | 不显式构建 BEV 特征 | 显式 BEV 网格 (H×W) |
-| **投影方式** | 3D → 2D（坐标隐式关联）| 3D reference points → 2D 投影 |
-| **计算** | 一次 forward pass | 每层都要做 Cross-Attn |
-| **优势** | 简洁、端到端 | BEV 表示对下游友好 |
+会（error accumulation）。缓解：高 confidence threshold 入 queue + detach memory（不反向传播）。实验中 8 帧有边际收益 → 更长可能有害。
 
 ---
 
-## 📖 推荐资料
-
-- PETR 论文 (ECCV 2022)
-- PETRv2 论文 (ICCV 2023)
-- StreamPETR 论文 (ICCV 2023)
-- DETR 论文 (ECCV 2020) — Object Query 机制基础
-
----
-
-## 相关笔记
-
-- [[Transformer架构详解]]
-- [[BEVFormer详解]]
-- [[BEV感知全景]]
-- [[端到端自动驾驶概览]]
+> 📚 **相关**: [[BEVFormer详解]], [[BEVDet与BEVDepth]], [[Transformer进阶知识]]

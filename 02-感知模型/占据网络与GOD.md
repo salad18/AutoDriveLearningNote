@@ -115,6 +115,102 @@ graph LR
 | **FastOcc** | 轻量化设计 | 实时 ⚡ |
 | **SparseOcc** | 稀疏体素表示 | 快 |
 
+#### FlashOcc 核心技术: Channel-to-Height
+
+```python
+# 传统方法: BEV [C, 200, 200] → 3D Conv 上采样 → [C, 200, 200, 16]
+# → 3D Conv 计算量大!
+
+# FlashOcc: 将通道维度重新解释为高度维度 (无需 3D Conv!)
+# BEV feature: [C, 200, 200]
+# 其中 C = C' × H_z (如 256 = 16 × 16)
+# 直接 reshape: [256, 200, 200] → [16, 16, 200, 200] → permute → [16, 200, 200, 16]
+# → 零额外计算! 纯 reshape 操作!
+
+class ChannelToHeight(nn.Module):
+    def forward(self, bev_feat):
+        # bev_feat: [B, 256, 200, 200]
+        # H_z = 16 (height bins)
+        b, c, h, w = bev_feat.shape
+        return bev_feat.reshape(b, -1, 16, h, w).permute(0, 1, 3, 4, 2)
+        # → [B, 16, 200, 200, 16] — occupany prediction per height level
+```
+
+**为什么有效?** BEV 特征已经编码了 3D 信息（因为它来自多视角图像投影），通道维度自然包含了高度信息。不需要 3D Conv 来重构——直接 reshape 即可。这是最近轻量化占据网络的核心 trick。
+
+---
+
+## 四、GOD — 通用目标检测
+
+（保持原有内容）
+
+---
+
+## 五、面试官追问
+
+### Q: TPVFormer 的 O(XY+XZ+YZ) 复杂度怎么算的？
+
+传统 3D Occupancy: $O(X \cdot Y \cdot Z)$ 个体素 (如 200×200×16=640K)
+TPV: 只需存 3 个平面: $O(XY + XZ + YZ) = 200×200 + 200×16 + 200×16 = 40K + 3.2K + 3.2K = 46.4K$
+
+节省: 640K / 46.4K ≈ **14×** 显存减少！
+
+但代价：任何体素的信息由 3 个平面特征求和得到（sum of 3 values）→ 精度略低于完整 3D voxel → 适合表示**大尺度结构**，精细结构可能丢失。
+
+### Q: Occ3D 的 17 类语义是怎么标注的？
+
+17 类 = nuScenes 的 10 个检测类别 + 7 个额外的静态类别：
+
+| 类型 | 类别 |
+|------|------|
+| 动态 (10类) | car, truck, bus, trailer, construction, pedestrian, motorcycle, bicycle, traffic_cone, barrier |
+| 静态 (7类) | driveable_surface, other_flat, sidewalk, terrain, manmade, vegetation, free (empty) |
+
+标注方法：利用 nuScenes 的 3D box 标注 → box 内部的 voxel 赋动态语义 → LiDAR 点投影到 voxel 赋静态语义 → 无观测区域标记为 unknown。
+
+**核心问题**: 标注的完整性有限 — 被遮挡区域是 unknown, 远处 LiDAR 稀疏 → 模型需要学习填补这些空缺。
+
+### Q: 占据网络的损失函数怎么设计？
+
+```python
+# 多任务损失:
+L_total = L_occ + λ1 * L_semantic + λ2 * L_flow
+
+# 占用损失: BCE per voxel
+L_occ = BCE(occ_pred, occ_gt)  # [B, 200, 200, 16]
+
+# 语义损失: 对占据的 voxel 做 CE
+L_semantic = CE(semantic_pred[occ_gt==1], semantic_gt[occ_gt==1])
+
+# 类别不平衡处理: 对静态类别（路面、植被）降权
+# 因为路面占了 >50% 的占据 voxel → 不加权会被路面主导
+class_weights = {driveable: 0.5, vegetation: 0.5, car: 2.0, pedestrian: 3.0, ...}
+```
+
+### Q: 占据网络 vs 3D 检测 vs BEV 检测的发展趋势？
+
+2024 年的共识路线：
+
+```
+第一阶段 (2021-2022): BEV 2D Detection (BEVDet, BEVFormer)
+  → 2D BEV 平面上的 BBox 检测
+
+第二阶段 (2023-2024): BEV + 3D Occupancy (BEVFormer v2, Occ3D)
+  → BEV 检测 + 3D 占据双输出
+
+第三阶段 (2024-): 3D Occupancy-First (Tesla ON, 华为 GOD)
+  → 以 3D 占据为主要感知输出
+  → 检测从占据中导出（DBSCAN 聚类）
+  → 占据直接供规划消费（替代 HD Map）
+```
+
+**关键驱动力**: 占据比 BBox 更适合规划（稠密空间信息 vs 稀疏物体信息）→ 规划可以直接在占据空间中做碰撞检测和路径搜索。
+
+---
+
+> 📚 **相关**: [[BEVFormer详解]], [[BEV感知全景]], [[华为ADS技术方案]]
+> 🎯 **面试**: [[常见面试题-感知算法]] Q7-9
+
 ---
 
 ## 四、GOD — 通用目标检测
