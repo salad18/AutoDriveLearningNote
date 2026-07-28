@@ -5,5 +5,7 @@
   "baseFontSize": 16,
   "translucency": false,
   "nativeMenus": false,
-  "showViewHeader": true
+  "showViewHeader": true,
+  "enabledCssSnippets": [],
+  "showRibbon": true
 }

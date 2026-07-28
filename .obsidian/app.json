@@ -1,5 +1,4 @@
 {
-  "showRibbon": true,
   "promptDelete": false,
   "newFileLocation": "folder",
   "newFileFolderPath": "06-每日记录",
@@ -31,5 +30,6 @@
     "dist/",
     "build/"
   ],
-  "focusNewTab": true
+  "focusNewTab": true,
+  "openBehavior": "daily"
 }
