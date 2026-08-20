@@ -113,7 +113,12 @@
 5. **预览**：阅读视图（Reading view）渲染最稳定；Live Preview 下公式偶尔滞后于光标，属正常现象
 6. 单篇笔记公式过多（数百个）会导致编辑卡顿，建议按主题拆分
 
-**增强工具**：书写用 **Latex Suite**（`\frac`、`\mathbb` 等自动补全，可自定义 snippet）；渲染优化/自定义宏用 **Better MathJax**（在其设置中配置 `\bm`、physics 等宏包）。
+**增强工具（已装，无需改动本库公式写法）**：
+
+- **LaTeX Suite** = **输入加速器**（输入 `\frac`、`\mathbb` 等时自动补全/展开 snippet），**不影响渲染，不修改已有笔记**——安装后已有的 `$...$` / `$$...$$` 公式原样渲染。
+- **Better MathJax** = **渲染增强器**（加载 amsmath、physics 等额外宏包），**让更多 LaTeX 命令可用**（如 `\bm`、`\begin{cases}`），本库已有的 `aligned`/`bmatrix`/`\mathbb`/`\text{}` 写法它天然兼容，**无需修改**。
+- 唯一注意：若想用 `\bm`、`\mathrm` 等 Better MathJax 默认未启用的宏，需在插件设置 → "TeX 宏包/宏"里自行添加；本库现有公式用不到，不用管。
+- 写新公式时享受 LaTeX Suite 补全即可，写出来的依然是标准 `$...$` 语法，与上表规范一致。
 
 ---
 
