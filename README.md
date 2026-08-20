@@ -21,33 +21,38 @@
 
 ---
 
-## 🧠 核心学习路径
+## 🧠 核心学习路径（2026-08 重排：循序渐进）
 
-### Phase 1：基础
+> 📌 **调整说明**：新增 [[模型架构演进]] 衔接 MLP/CNN 基础；[[多传感器融合基础]] 移到 BEV 之后（融合依赖模型基础）。
 
+### Stage 1：模型基础（打地基）
+
+- [ ] 模型架构演进（MLP→CNN→Transformer→ViT→DETR，配图衔接基础）
 - [ ] 计算机视觉基础（CNN, 目标检测, 语义分割）
 - [ ] Transformer 架构（Attention, ViT, DETR）
 - [ ] 3D 视觉（点云, 体素, 投影变换, 相机模型）
-- [ ] 自动驾驶感知 pipeline 概述
 
-### Phase 2：BEV 感知
+### Stage 2：BEV 感知（Transformer 的应用）
 
 - [ ] BEV 核心思想：为什么需要鸟瞰图？
-- [ ] BEVFormer — 时序 BEV 特征变换
 - [ ] BEVDet / BEVDepth — 纯视觉 BEV 方案
+- [ ] BEVFormer — 时序 BEV 特征变换
 - [ ] PETR 系列 — 位置嵌入变换
-- [ ] 占据网络（OccNet / TPVFormer）
 
-### Phase 3：端到端
+### Stage 3：多传感器融合 + 3D 占据（有模型基础后）
+
+- [ ] 多传感器融合（LiDAR + Camera + Radar）⭐ 移到 BEV 之后
+- [ ] 占据网络（OccNet / TPVFormer / GOD）
+
+### Stage 4：端到端
 
 - [ ] UniAD — 统一的端到端自动驾驶框架
 - [ ] VAD — 矢量化端到端自动驾驶
 - [ ] DriveVLM / DriveGPT — 大模型 + 自动驾驶
 - [ ] 世界模型（GAIA-1, DriveDreamer）
 
-### Phase 4：深入方向
+### Stage 5：深入方向
 
-- [ ] 多模态融合（LiDAR + Camera + Radar）
 - [ ] 时序建模与预测
 - [ ] 开环 vs 闭环评估
 - [ ] 仿真与数据闭环
