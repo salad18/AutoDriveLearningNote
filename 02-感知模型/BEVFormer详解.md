@@ -637,10 +637,10 @@ def temporal_self_attention(bev_query, prev_bev, ego_motion):
 
 按知识库学习路径，读完本篇你应该接着：
 
-1. **[[占据网络与GOD]]** —— 新手路径第 4 站：从 BEV 检测升级到 3D 占据（BEVFormer 的 trailer/construction 检测短板 → 占据网络的动机）。
-2. **[[PETR系列]]** —— 进阶：第三条路线，用 3D 位置编码替代"投影 + 采样"。
-3. **[[UniAD详解]]** —— 端到端：BEVFormer 的 Query 思想如何被 UniAD 发扬光大（多任务 Query 交互）。
-4. **[[Transformer进阶知识]]** —— 深入：FlashAttention、RoPE 等让 Transformer 更快更稳的进阶机制。
+1. **[[多传感器融合基础]]** —— 学习路径第 10 站：BEV 之后读融合（理解"BEV 是多模态融合的公共坐标系"）。
+2. **[[占据网络与GOD]]** —— 学习路径第 11 站：从 BEV 检测升级到 3D 占据（BEVFormer 的 trailer/construction 检测短板 → 占据网络的动机）。
+3. **[[PETR系列]]** —— 进阶：第三条路线，用 3D 位置编码替代"投影 + 采样"。
+4. **[[UniAD详解]]** —— 端到端：BEVFormer 的 Query 思想如何被 UniAD 发扬光大（多任务 Query 交互）。
 
 > 💡 带着这张"时空注意力"图去读 [[UniAD详解]]——你会发现 UniAD 的 Track Query 机制就是 BEVFormer Temporal Attention 思想的端到端延伸。
 
