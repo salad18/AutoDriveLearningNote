@@ -1,0 +1,94 @@
+﻿storage: 内部共享存储空间
+  root child: [Pictures]
+  root child: [XiaoJi]
+  root child: [.ccc]
+  root child: [.turingdebug]
+  root child: [HeyBox]
+  root child: [deviceId.txt]
+  root child: [2023-08-18Log.txt]
+  root child: [MIUI]
+  root child: [tmp]
+  root child: [apm]
+  root child: [My Documents]
+  root child: [SigmobAndroid]
+  root child: [statistic]
+  root child: [.bbb]
+  root child: [Luban]
+  root child: [com.kingsoft.moffice_pro_hw]
+  root child: [文档.pdf]
+  root child: [tencent]
+  root child: [Android]
+  root child: [qqmusic]
+  root child: [18-尚甦.xls]
+  root child: [ColorOS]
+  root child: [Documents]
+  root child: [SHjiaojing]
+  root child: [sogou]
+  root child: [Notifications]
+  root child: [Browser]
+  root child: [backups]
+  root child: [Office]
+  root child: [MasterArchive]
+  root child: [.fileMOShare]
+  root child: [Max]
+  root child: [.aaa]
+  root child: [Backup]
+  root child: [BaiduWenku]
+  root child: [oua_classifier]
+  root child: [AFK_Share.jpg]
+  root child: [.SLOGAN]
+  root child: [.turing.dat]
+  root child: [Movies]
+  root child: [tieba]
+  root child: [kfcCache]
+  root child: [Download]
+  root child: [.DataStorage]
+  root child: [hupu]
+  root child: [yys_share.jpg]
+  root child: [yumcCache]
+  root child: [Audiobooks]
+  root child: [Alarms]
+  root child: [sandbox]
+  root child: [ks]
+  root child: [CamScanner]
+  root child: [Fonts]
+  root child: [Recordings]
+  root child: [qvs]
+  root child: [Music]
+  root child: [BaiduNetdisk]
+  root child: [QQBrowser]
+  root child: [Podcasts]
+  root child: [FaceApp]
+  root child: [ICBC]
+  root child: [DCIM]
+  root child: [tomatodo]
+  root child: [.UTSystemConfig]
+  root child: [Ringtones]
+  root child: [Obsidian]
+source Obsidian\MyKB files: 169
+destination Documents\MyKB created
+copying: 02-感知模型
+copying: 01-基础理论
+copying: 10-前沿追踪
+copying: .obsidian
+copying: 07-每日记录
+copying: 00-方法论
+copying: .sisyphus
+copying: 05-论文阅读
+copying: Templates
+copying: 04-训练与工程
+copying: 06-代码实践
+copying: 08-资源索引
+copying: 03-端到端模型
+copying: 09-面试准备
+copying: Attachments
+copying: 000-知识库地图.md
+copying: README.md
+copying: .gitignore
+copying: 学习计划.md
+copying: 00-学习路径.md
+poll: 0/20
+poll: 0/20
+poll: 0/20
+poll: 0/20
+poll: 0/20
