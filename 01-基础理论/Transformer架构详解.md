@@ -15,7 +15,7 @@ updated: "2026-08-21"
 | 项目 | 内容 |
 |------|------|
 | **这篇学什么** | Self-Attention 的完整推导与直觉、Q/K/V 到底是什么、Multi-Head / Cross-Attention / Deformable Attention、位置编码、ViT / DETR / Swin 三个经典变体、BEVFormer 中的实际应用 |
-| **需要的前置知识** | [[计算机视觉基础]]（CNN 部分）；会看矩阵乘法即可，本篇每个公式都配白话解释 |
+| **需要的前置知识** | [[模型架构演进]]（⭐ 架构演进地图，衔接 MLP/CNN→Transformer）、[[计算机视觉基础]]（CNN 部分）；会看矩阵乘法即可，本篇每个公式都配白话解释 |
 | **学完之后你能** | ① 用自己的话讲清楚 Q/K/V 和注意力公式；② 说清 Self vs Cross Attention 的区别；③ 理解 Object Query 机制；④ 为读懂 BEVFormer、PETR、UniAD 扫清障碍 |
 | **预计阅读时间** | 60-90 分钟 |
 
