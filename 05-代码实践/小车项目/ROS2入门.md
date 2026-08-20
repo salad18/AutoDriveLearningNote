@@ -273,8 +273,8 @@ class LaneDetectionNode(Node):
         
         # 透视变换 → BEV
         h, w = edges.shape
-        src = np.float32([[100,h-120], [540,h-120], [0,h], [w,h]])
-        dst = np.float32([[160,0], [480,0], [160,h], [480,h]])
+        src = np.float32([ [100,h-120], [540,h-120], [0,h], [w,h] ])
+        dst = np.float32([ [160,0], [480,0], [160,h], [480,h] ])
         M = cv2.getPerspectiveTransform(src, dst)
         bev = cv2.warpPerspective(edges, M, (w, h))
         
