@@ -8,7 +8,7 @@ $ErrorActionPreference = 'Stop'
 # 增量判断依据: 文件大小 (MTP 上报的修改时间不可靠, 故不用时间比较)
 # 已知限制: 内容改了但字节数恰好不变的文件不会被识别(极少见)
 
-$SkipNames = @('.git', 'Thumbs.db', '.DS_Store', 'workspace.json', 'workspace-mobile.json')  # 任意层级跳过这些名字
+$SkipNames = @('.git', 'nul', 'Thumbs.db', '.DS_Store', 'workspace.json', 'workspace-mobile.json')  # 任意层级跳过这些名字
 $SkipExt   = @('.log')                                          # 跳过后缀
 
 $Vault   = Split-Path $PSScriptRoot -Parent     # 知识库根目录 = 脚本的上一级
@@ -19,6 +19,87 @@ $LogLines = New-Object System.Collections.ArrayList
 function Log($m) { [void]$LogLines.Add($m); Write-Host $m }
 function Log-Red($m) { [void]$LogLines.Add($m); Write-Host $m -ForegroundColor Red }
 function Log-Green($m) { [void]$LogLines.Add($m); Write-Host $m -ForegroundColor Green }
+
+# ===== 静默删除 MTP 文件的 COM 互操作定义 (IFileOperation + FOF_NOCONFIRMATION, 不弹窗) =====
+$csharpCode = @'
+using System;
+using System.Runtime.InteropServices;
+
+public static class MtpSilentDelete
+{
+    [ComImport, Guid("3ad05575-8857-4850-9277-11b85bdb8e09")]
+    private class FileOperation { }
+
+    [ComImport, Guid("947aab5f-0a5c-4c13-b4d6-4bf7836fc9f8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IFileOperation
+    {
+        void Advise([In] IntPtr pfops, [Out] out uint pdwCookie);
+        void Unadvise([In] uint dwCookie);
+        void SetOperationFlags([In] uint dwOperationFlags);
+        void SetProgressMessage([In, MarshalAs(UnmanagedType.LPWStr)] string pszMessage);
+        void SetProgressDialog([In] IntPtr pops);
+        void SetProperties([In] IntPtr pproparray);
+        void SetOwnerWindow([In] IntPtr hwndOwner);
+        void ApplyPropertiesToItem([In] IntPtr psiItem);
+        void ApplyPropertiesToItems([In] IntPtr punkItems);
+        void RenameItem([In] IntPtr psiItem, [In, MarshalAs(UnmanagedType.LPWStr)] string pszNewName);
+        void RenameItems([In] IntPtr punkItems, [In, MarshalAs(UnmanagedType.LPWStr)] string pszNewName);
+        void MoveItem([In] IntPtr psiItem, [In] IntPtr psiDestinationFolder, [In, MarshalAs(UnmanagedType.LPWStr)] string pszNewName);
+        void MoveItems([In] IntPtr punkItems, [In] IntPtr psiDestinationFolder);
+        void CopyItem([In] IntPtr psiItem, [In] IntPtr psiDestinationFolder, [In, MarshalAs(UnmanagedType.LPWStr)] string pszCopyName);
+        void CopyItems([In] IntPtr punkItems, [In] IntPtr psiDestinationFolder);
+        void DeleteItem([In] IntPtr psiItem, [In] IntPtr pfopsItem);
+        void DeleteItems([In] IntPtr punkItems);
+        void NewItem([In] IntPtr psiDestinationFolder, [In] uint dwFileAttributes, [In, MarshalAs(UnmanagedType.LPWStr)] string pszName, [In, MarshalAs(UnmanagedType.LPWStr)] string pszTemplateName);
+        void PerformOperations();
+        [return: MarshalAs(UnmanagedType.Bool)] bool GetAnyOperationsAborted();
+    }
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    private static extern int SHCreateItemFromParsingName(
+        [In, MarshalAs(UnmanagedType.LPWStr)] string pszPath,
+        [In] IntPtr pbc,
+        [In] ref Guid riid,
+        [Out] out IntPtr ppv);
+
+    public static int DeleteSilent(string path)
+    {
+        IntPtr item = IntPtr.Zero;
+        try
+        {
+            Guid iidShellItem = new Guid("b63ea76d-1f85-456f-a19c-48159efa858b");
+            int hr = SHCreateItemFromParsingName(path, IntPtr.Zero, ref iidShellItem, out item);
+            if (hr != 0) return hr;
+            Type t = Type.GetTypeFromCLSID(new Guid("3ad05575-8857-4850-9277-11b85bdb8e09"));
+            if (t == null) return -1;
+            IFileOperation fo = (IFileOperation)Activator.CreateInstance(t);
+            const uint FOF_SILENT = 0x0004;
+            const uint FOF_NOCONFIRMATION = 0x0010;
+            const uint FOF_NOERRORUI = 0x0400;
+            fo.SetOperationFlags(FOF_SILENT | FOF_NOCONFIRMATION | FOF_NOERRORUI);
+            fo.DeleteItem(item, IntPtr.Zero);
+            fo.PerformOperations();
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            return Marshal.GetHRForException(ex);
+        }
+        finally
+        {
+            if (item != IntPtr.Zero) Marshal.Release(item);
+        }
+    }
+}
+'@
+
+$SilentDeleteAvailable = $false
+try {
+  Add-Type -TypeDefinition $csharpCode -ErrorAction Stop
+  $SilentDeleteAvailable = $true
+} catch {
+  Write-Host '静默删除组件编译失败, 将使用传统删除方式(可能弹窗)' -ForegroundColor Yellow
+}
 
 function Get-NS([object]$item) {
   $f = $item.GetFolder()
@@ -47,6 +128,18 @@ function Get-FileSize($item) {
 function Delete-ItemMTP($dstNS, $name) {
   $it = $dstNS.ParseName($name)
   if (-not $it) { return $true }
+  if ($SilentDeleteAvailable) {
+    $hr = [MtpSilentDelete]::DeleteSilent($it.Path)
+    if ($hr -eq 0) {
+      $deadline = (Get-Date).AddSeconds(30)
+      while ((Get-Date) -lt $deadline) {
+        Start-Sleep -Milliseconds 800
+        if ($null -eq $dstNS.ParseName($name)) { return $true }
+      }
+      return $false
+    }
+  }
+  # 兜底: 传统方式(极少触发, 可能弹窗)
   $done = $false
   foreach ($v in @($it.Verbs())) {
     if ($v.Name -match 'delete|删除') { try { $v.DoIt(); $done = $true } catch { }; break }
