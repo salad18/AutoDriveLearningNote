@@ -54,18 +54,21 @@ updated: "2026-08-21"
 **整体直觉：两条生产线接力。**
 
 ```mermaid
-flowchart LR
+flowchart TD
     subgraph 输入
         A[多视角/环视图像] --> B[VLM 编码器]
     end
-    subgraph Chain 自回归生成器
-        B --> C[生成 N 个因果轨迹模式<br/>每个模式=一段合理的未来走向]
+    subgraph Chain["Chain 自回归生成器"]
+        C[生成 N 个因果轨迹模式]
     end
-    subgraph Flow 扩散精修器
-        C --> D[选一个模式<br/>+ VLM 隐状态作语义先验]
-        B --> D
-        D --> E[在残差空间扩散校正<br/>保留因果结构 修正细节]
+    subgraph Flow["Flow 扩散精修器"]
+        D[选一个模式 + VLM 隐状态作先验]
+        E[残差空间扩散校正]
     end
+    B --> C
+    C --> D
+    B --> D
+    D --> E
     E --> F[最终轨迹]
 ```
 

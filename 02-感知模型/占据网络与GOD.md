@@ -131,7 +131,7 @@ updated: "2026-08-21"
 
 **核心方案**：
 ```mermaid
-graph LR
+flowchart TD
     A[多相机图像] --> B[2D Backbone]
     B --> C[BEV 特征]
     C --> D[3D 占据特征体积]

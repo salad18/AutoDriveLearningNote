@@ -122,7 +122,7 @@ BEV/多视角特征 → 3D 占据栅格（每个格子的占用概率 + 语义�
 ### 四条路线的关系图
 
 ```mermaid
-graph LR
+flowchart TD
     A[多相机 2D 图像] --> B[LSS 派<br/>显式深度+拍平]
     A --> C[BEVFormer 派<br/>Query+Cross-Attention]
     A --> D[PETR 派<br/>3D 位置编码]

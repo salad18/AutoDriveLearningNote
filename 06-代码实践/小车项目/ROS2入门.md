@@ -184,16 +184,16 @@ Node 之间通过 Topic 交换数据。命名规范：
 ### 小车系统的完整 Topic 图
 
 ```mermaid
-graph LR
-    Cam[📷 相机节点] -->|/camera/image| Perc[🧠 感知节点]
-    Ultr[📡 超声波] -->|/ultrasonic| Brake[🛑 紧急刹车]
-    IMU[🧭 IMU] -->|/imu/data| Loca[📍 定位节点]
-    Encoder[⚙️ 编码器] -->|/encoder| Loca
-    Perc -->|/detections| Plan[🗺️ 规划节点]
-    Loca -->|/odom| Plan
-    Plan -->|/cmd_vel| Ctrl[🎮 控制节点]
-    Brake -->|/cmd_vel| Ctrl
-    Ctrl -->|串口| Arduino[🔌 Arduino]
+flowchart TD
+    Cam[相机] -->|image| Perc[感知]
+    Ultr[超声波] -->|ultrasonic| Brake[紧急刹车]
+    IMU[IMU] -->|imu| Loca[定位]
+    Enc[编码器] -->|encoder| Loca
+    Perc -->|detections| Plan[规划]
+    Loca -->|odom| Plan
+    Plan -->|cmd_vel| Ctrl[控制]
+    Brake -->|cmd_vel| Ctrl
+    Ctrl -->|串口| Ard[Arduino]
 ```
 
 > [!warning] 这张图 = 小车系统的"架构图"（面试/理解核心）

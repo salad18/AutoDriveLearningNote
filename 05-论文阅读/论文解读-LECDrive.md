@@ -53,20 +53,11 @@ updated: "2026-11-04"
 **整体直觉：给 VLA 装一条"认知流水线"——先看世界（视觉），再懂语义（是什么），最后量几何（多远）。**
 
 ```mermaid
-flowchart LR
-    subgraph 基础模型（稠密知识来源）
-        A1[DINOv3<br/>视觉表示] 
-        A2[SAM3<br/>语义结构]
-        A3[DepthAnything3<br/>空间几何]
-    end
-    subgraph LECDrive
-        B[紧凑的任务特定 latent token<br/>作为"知识载体"]
-        C[隐专家认知链<br/>课程学习渐进注入]
-    end
-    A1 --> C
-    A2 --> C
-    A3 --> C
-    C --> B
+flowchart TD
+    A1[DINOv3<br/>视觉表示] --> C[隐专家认知链<br/>课程学习渐进注入]
+    A2[SAM3<br/>语义结构] --> C
+    A3[DepthAnything3<br/>空间几何] --> C
+    C --> B[紧凑任务特定 latent token<br/>知识载体]
     B --> D[VLA 策略<br/>稀疏动作输出]
 ```
 
